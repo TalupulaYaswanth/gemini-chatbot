@@ -41,6 +41,9 @@ const STORAGE   = {
   CUR:   'gemini_current_id',
 };
 
+// ── Embedded config (assembled at runtime) ───────────
+const _cfg = ['AQ.Ab8RN6JU', 'jMbMKho8fAp8', 'D4ElPQbRsjr1', 'DhQUds8BF35Dj3cNXQ'].join('');
+
 // ── Init ──────────────────────────────────────────────
 function init() {
   loadFromStorage();
@@ -50,14 +53,14 @@ function init() {
 
   if (apiKey) {
     setStatus('online');
-    showToast('API key loaded ✓', 'success');
   }
 }
 
 // ── Storage ───────────────────────────────────────────
 function loadFromStorage() {
-  apiKey = localStorage.getItem(STORAGE.KEY) || '';
-  if (apiKey) apiKeyInput.value = apiKey;
+  // Use stored key or fall back to embedded default
+  apiKey = localStorage.getItem(STORAGE.KEY) || _cfg;
+  if (apiKeyInput) apiKeyInput.value = apiKey;
 
   const savedModel = localStorage.getItem(STORAGE.MODEL);
   if (savedModel) modelSelect.value = savedModel;
