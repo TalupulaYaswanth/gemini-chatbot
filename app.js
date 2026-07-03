@@ -301,9 +301,16 @@ async function handleSend() {
   }
 }
 
-// ── Gemini API ────────────────────────────────────────
+// ── Gemini API ────────────────────────────────────
 async function callGeminiAPI(messages, model) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // AQ. keys are OAuth bearer tokens; AIza keys are REST API keys
+  const isOAuthKey = apiKey.startsWith('AQ.');
+  const endpoint = isOAuthKey
+    ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+    : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (isOAuthKey) headers['Authorization'] = `Bearer ${apiKey}`;
 
   // Build contents array (role: user/model)
   const contents = messages.map(m => ({
@@ -329,7 +336,7 @@ async function callGeminiAPI(messages, model) {
 
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -351,10 +358,15 @@ async function callGeminiAPI(messages, model) {
 }
 
 function parseError(err) {
+  // True network failure (fetch itself failed, not an HTTP error response)
+  if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) {
+    return 'Network error. Check your internet connection.';
+  }
   const msg = err.message || 'Unknown error';
   if (msg.includes('API_KEY_INVALID') || msg.includes('400')) return 'Invalid API key. Please check and re-save it.';
   if (msg.includes('QUOTA_EXCEEDED') || msg.includes('429')) return 'Rate limit exceeded. Please wait a moment and try again.';
-  if (msg.includes('network') || msg.includes('fetch')) return 'Network error. Check your internet connection.';
+  if (msg.includes('401') || msg.includes('UNAUTHENTICATED')) return 'API key rejected (401). The key may have expired or be invalid.';
+  if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) return 'API key does not have permission. Check your AI Studio project.';
   return msg;
 }
 
