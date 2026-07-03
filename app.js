@@ -143,8 +143,8 @@ function setupEventListeners() {
 function saveApiKey() {
   const val = apiKeyInput.value.trim();
   if (!val) { showToast('Please enter an API key', 'error'); return; }
-  if (!val.startsWith('AIza')) {
-    showToast('Key should start with "AIza…"', 'error'); return;
+  if (!val.startsWith('AIza') && !val.startsWith('AQ.')) {
+    showToast('Invalid API key format', 'error'); return;
   }
   apiKey = val;
   localStorage.setItem(STORAGE.KEY, apiKey);
