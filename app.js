@@ -41,8 +41,10 @@ const STORAGE   = {
   CUR:   'gemini_current_id',
 };
 
-// ── Embedded config (assembled at runtime) ───────────
-const _cfg = ['AQ.Ab8RN6JU', 'jMbMKho8fAp8', 'D4ElPQbRsjr1', 'DhQUds8BF35Dj3cNXQ'].join('');
+// ── Backend API URL ──────────────────────────────────
+// When running locally: http://localhost:5000
+// After deploying to Render/Railway: replace with your live URL
+const BACKEND_URL = 'https://gemini-chatbot-api.onrender.com';
 
 // ── Init ──────────────────────────────────────────────
 function init() {
@@ -51,16 +53,14 @@ function init() {
   autoResizeTextarea();
   setupEventListeners();
 
-  if (apiKey) {
+  if (apiKey || BACKEND_URL) {
     setStatus('online');
   }
 }
 
-// ── Storage ───────────────────────────────────────────
+// ── Storage ───────────────────────────────────────────────────────────────
 function loadFromStorage() {
-  // Use stored key or fall back to embedded default
-  apiKey = localStorage.getItem(STORAGE.KEY) || _cfg;
-  if (apiKeyInput) apiKeyInput.value = apiKey;
+  // No API key needed on frontend — backend handles it securely
 
   const savedModel = localStorage.getItem(STORAGE.MODEL);
   if (savedModel) modelSelect.value = savedModel;
@@ -301,60 +301,29 @@ async function handleSend() {
   }
 }
 
-// ── Gemini API ────────────────────────────────────
+// ── Gemini API (via secure backend) ──────────────────
 async function callGeminiAPI(messages, model) {
-  // AQ. keys are OAuth bearer tokens; AIza keys are REST API keys
-  const isOAuthKey = apiKey.startsWith('AQ.');
-  const endpoint = isOAuthKey
-    ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
-    : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // The last user message is the current prompt
+  const userPrompt = messages[messages.length - 1].text;
 
-  const headers = { 'Content-Type': 'application/json' };
-  if (isOAuthKey) headers['Authorization'] = `Bearer ${apiKey}`;
-
-  // Build contents array (role: user/model)
-  const contents = messages.map(m => ({
-    role: m.role === 'user' ? 'user' : 'model',
-    parts: [{ text: m.text }],
-  }));
-
-  const body = {
-    contents,
-    generationConfig: {
-      temperature: 0.9,
-      topK: 40,
-      topP: 0.95,
-      maxOutputTokens: 8192,
-    },
-    safetySettings: [
-      { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-    ],
-  };
-
-  const res = await fetch(endpoint, {
+  const res = await fetch(`${BACKEND_URL}/api/ask`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: userPrompt,
+      model,
+      session_id: currentId || 'default',
+    }),
   });
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+    throw new Error(errData?.error || `Server error: HTTP ${res.status}`);
   }
 
   const data = await res.json();
-  const candidate = data?.candidates?.[0];
-
-  if (!candidate) throw new Error('No response generated. The content may have been filtered.');
-
-  if (candidate.finishReason === 'SAFETY') {
-    throw new Error('Response blocked by safety filters. Try rephrasing your question.');
-  }
-
-  return candidate?.content?.parts?.[0]?.text || 'I received an empty response. Please try again.';
+  if (data.error) throw new Error(data.error);
+  return data.response || 'Empty response from server.';
 }
 
 function parseError(err) {
